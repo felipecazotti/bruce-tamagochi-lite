@@ -1,4 +1,21 @@
 // created by hxd57. V2
+// repository: https://github.com/HawkstoNGriM/m5-bruce-tamagochi-lite
+var dbStore = {fs: "sd", path: "/pet.json"}; // fs can be "sd" or "littlefs"
+var storage = require("storage");
+var display = require('display');
+var keyboard = require('keyboard');
+var dialog = require('dialog');
+var serialApi = require('serial');
+
+var width = display.width;
+var height = display.height;
+var color = display.color;
+var fillScreen = display.fill;
+var drawString = display.drawString;
+var setTextColor = display.setTextColor;
+var setTextSize = display.setTextSize;
+
+var serialCmd = serialApi.cmd;
 var pastelColors = {
   "Peach": color(255, 223, 186),
   "Mint": color(186, 255, 201),
@@ -7,19 +24,19 @@ var pastelColors = {
   "Yellow": color(255, 255, 186),
   "White": color(255, 255, 255),
   "Lavender": color(230, 230, 250),
-  "Coral": color(255, 127, 80),    
-  "Aqua": color(127, 255, 212),    
-  "Beige": color(245, 245, 220)    
+  "Coral": color(255, 127, 80),
+  "Aqua": color(127, 255, 212),
+  "Beige": color(245, 245, 220)
 };
-var currentBgColor = pastelColors["Peach"]; 
+var currentBgColor = pastelColors["Peach"];
 
 var faceColors = {
   "Black": color(0, 0, 0),
   "White": color(255, 255, 255),
-  "Red": color(255, 0, 0),         
-  "Blue": color(0, 0, 255),        
-  "Green": color(0, 255, 0),       
-  "Purple": color(128, 0, 128)     
+  "Red": color(255, 0, 0),
+  "Blue": color(0, 0, 255),
+  "Green": color(0, 255, 0),
+  "Purple": color(128, 0, 128)
 };
 var faceColor = faceColors["Black"]; // Default face color
 
@@ -35,23 +52,25 @@ function Pet(name, type, hunger, cleanliness, happiness, timeLastFed, timeLastPe
   this.timeLastCleaned = timeLastCleaned || time; // Track cleaning time
 }
 
-
 Pet.prototype = {
   feed: function() {
     this.hunger = Math.max(0, this.hunger - 10); // Reduce hunger by 10%, but not below 0%
     this.timeLastFed = now();
     this.happiness = Math.min(100, this.happiness + 20); // Increase happiness by 20%, but not above 100%
-    dialogMessage(this.name + " has been fed!");
+    display.fill(currentBgColor);
+    dialog.message(this.name + " has been fed!");
   },
   clean: function() {
     this.cleanliness = 100; // Fully clean
     this.timeLastCleaned = now();
-    dialogMessage(this.name + " is now clean!");
+    display.fill(currentBgColor);
+    dialog.message(this.name + " is now clean!");
   },
   pet: function() {
     this.happiness = Math.min(100, this.happiness + 10); // Reduced happiness gain
     this.timeLastPet = now();
-    dialogMessage(this.name + " loves your petting!");
+    display.fill(currentBgColor);
+    dialog.message(this.name + " loves your petting!");
   },
   updateHunger: function() {
     var time = now();
@@ -81,13 +100,19 @@ Pet.prototype = {
       timeLastCleaned: this.timeLastCleaned // Save cleaning time
     };
     var jsonString = JSON.stringify(petData) + "\n";
-    storageWrite("pet.json", jsonString);
+    storage.write(dbStore, jsonString);
   }
 };
 
 
 function loadPet() {
-  var data = storageRead("pet.json") || storageRead("../pet.json"); // Check both locations
+  var data = null;
+  try {
+    data = storage.read(dbStore);
+  } catch (e1) {
+    return null;
+  }
+
   if (data) {
     try {
       var lines = data.split("\n");
@@ -109,12 +134,14 @@ function loadPet() {
         } else {
           obj.timeLastCleaned = Number(obj.timeLastCleaned);
         }
-        return new Pet(obj.name, obj.type, obj.hunger, obj.cleanliness, 
+        return new Pet(obj.name, obj.type, obj.hunger, obj.cleanliness,
                        obj.happiness, obj.timeLastFed, obj.timeLastPet, obj.timeLastCleaned);
       }
-    } catch (e) {
-      dialogError("Failed to load pet data: " + e.message);
-      return null;
+    } catch (e2) {
+      display.fill(currentBgColor);
+      dialog.error("Failed to load pet data: " + e2.message);
+      delay(10000);
+      throw e2;
     }
   }
   return null; // No pet file found
@@ -124,7 +151,7 @@ function drawPet(pet) {
   var screenWidth = width();
   var screenHeight = height();
   var textYSpacing = 14;
-  
+
   var faces = {
     cat: [" >_< ", "=^_^=", " ^-^ "],
     dog: [" T_T ", " o_o ", " ^_^ "],
@@ -136,11 +163,11 @@ function drawPet(pet) {
   setTextSize(2);
 
   // Include cleanliness in state calculation
-  var stateIndex = (pet.hunger >= 70 || pet.happiness <= 30 || pet.cleanliness <= 30) ? 0 : 
+  var stateIndex = (pet.hunger >= 70 || pet.happiness <= 30 || pet.cleanliness <= 30) ? 0 :
                    (pet.hunger >= 30 || pet.happiness <= 50 || pet.cleanliness <= 50) ? 1 : 2;
-  
+
   var face = faces[pet.type][stateIndex];
-  var faceWidth = face.length * 12; 
+  var faceWidth = face.length * 12;
   var faceX = Math.floor((screenWidth - faceWidth) / 2);
   var faceY = Math.floor(screenHeight * 0.3);
 
@@ -152,11 +179,11 @@ function drawPet(pet) {
     faceX += Math.sin(time / 200) * (screenWidth * 0.1);
   }
 
-  drawString(face, faceX, faceY); 
+  drawString(face, faceX, faceY);
   drawString(face, faceX + 1, faceY);
 
   var happyText = "Happy: " + pet.happiness + "%";
-  var happyWidth = happyText.length * 12; 
+  var happyWidth = happyText.length * 12;
   var happyX = Math.floor((screenWidth - happyWidth) / 2);
   drawString(happyText, happyX, 10);
 
@@ -198,7 +225,7 @@ function showHeartAnimation() {
   drawString(heartText, heartX, heartY);
 
   delay(1000);
-  
+
   var heartWidth2 = 3 * 12;
   var heartX = Math.floor((screenWidth - heartWidth2) / 2);
   var heartY = Math.floor(screenHeight * 0.5);
@@ -206,9 +233,9 @@ function showHeartAnimation() {
   setTextColor(color(255, 0, 0));
   setTextSize(1);
   drawString(heartText, heartX, heartY);
-  
+
   delay(1000);
-  
+
   // Restore the original background color
   fillScreen(currentBgColor);
 }
@@ -219,87 +246,89 @@ if (!pet) {
   fillScreen(currentBgColor);
   setTextColor(faceColor);
   setTextSize(2);
-  var name = keyboard("", 12, "Pet's name?") || "gotchi"; // Default to "gotchi"
-  var type = dialogChoice(["Cat", "cat", "Dog", "dog", "Bird", "bird"]) || "cat";
+  var name = keyboard.keyboard("", 12, "Pet's name?") || "gotchi"; // Default to "gotchi"
+  var type = dialog.choice([["Cat", "cat"], ["Dog", "dog"], ["Bird", "bird"]]) || "cat";
   pet = new Pet(name, type);
   pet.save();
 }
 
+var updateTime=0;
 while (true) {
-  pet.updateHunger();
-  pet.updateHappiness();
-  pet.updateCleanliness();													  
-  
-  drawPet(pet);
-  
-  if (getNextPress()) {
-    var choice = dialogChoice([
-      "Pet", "pet",
-      "Feed", "feed",
-      "Clean", "clean",
-      "Heart", "heart",
-      "Settings", "settings",
-      "New Pet", "newpet",
-      "Exit", "exit"
+  if(now()-updateTime>500){
+    pet.updateHunger();
+    pet.updateHappiness();
+    pet.updateCleanliness();
+    drawPet(pet);
+    updateTime = now();
+  }
+
+  if (keyboard.getNextPress()) {
+    var choice = dialog.choice([
+      ["Pet", "pet"],
+      ["Feed", "feed"],
+      ["Clean", "clean"],
+      ["Heart", "heart"],
+      ["Settings", "settings"],
+      ["New Pet", "newpet"],
+      ["Exit", "exit"]
     ]) || "";
-    
+
     if (choice === "exit") {
       pet.save(); // Save before exiting
       break;
     }
-    
+
     if (choice === "settings") {
-      var setting = dialogChoice([
-        "Change BG Color", "bgcolor",
-        "Face Color", "facecolor",
-        "Back", "back"
+      var setting = dialog.choice([
+        ["Change BG Color", "bgcolor"],
+        ["Face Color", "facecolor"],
+        ["Back", "back"]
       ]);
-      
       if (setting === "bgcolor") {
-        var colorChoice = dialogChoice([
-          "Peach", "Peach",
-          "Mint", "Mint",
-          "Pink", "Pink",
-          "Blue", "Blue",
-          "Yellow", "Yellow",
-          "White", "White",
-          "Lavender", "Lavender",
-          "Coral", "Coral",
-          "Aqua", "Aqua",
-          "Beige", "Beige"
+        var colorChoice = dialog.choice([
+          "Peach",
+          "Mint",
+          "Pink",
+          "Blue",
+          "Yellow",
+          "White",
+          "Lavender",
+          "Coral",
+          "Aqua",
+          "Beige"
         ]);
         if (colorChoice && pastelColors[colorChoice]) {
           currentBgColor = pastelColors[colorChoice];
         }
       }
       else if (setting === "facecolor") {
-        var fc = dialogChoice([
-          "Black", "black",
-          "White", "white",
-          "Red", "red",
-          "Blue", "blue",
-          "Green", "green",
-          "Purple", "purple"
+        var fc = dialog.choice([
+          ["Black", "black"],
+          ["White", "white"],
+          ["Red", "red"],
+          ["Blue", "blue"],
+          ["Green", "green"],
+          ["Purple", "purple"]
         ]);
         faceColor = faceColors[fc];
       }
     }
     else if (choice === "newpet") {
-      var confirm = dialogChoice([
-        "Yes (will delete old pet)", "yes",
-        "No (cancel)", "no"
+      var confirm = dialog.choice([
+        ["Yes (will delete old pet)", "yes"],
+        ["No (cancel)", "no"]
       ]);
-      
+
       if (confirm === "yes") {
         serialCmd("storage remove JS-scripts/bruce_0.sub");
         serialCmd("storage remove pet.json");
-        
+
         // Create a new pet
         fillScreen(currentBgColor);
         setTextColor(faceColor);
         setTextSize(2);
-        var name = keyboard("", 12, "Pet's name?") || "gotchi"; // Default to "gotchi"
-        var type = dialogChoice(["Cat", "cat", "Dog", "dog", "Bird", "bird"]) || "cat";
+        var name = keyboard.keyboard("", 12, "Pet's name?") || "gotchi"; // Default to "gotchi"
+        var type = dialog.choice([["Cat", "cat"], ["Dog", "dog"], ["Bird", "bird"]]) || "cat";
         pet = new Pet(name, type);
         pet.save();
       }
@@ -313,6 +342,6 @@ while (true) {
     }
     pet.save(); // Save after performing an action
   }
-  
-  delay(500);
+
+  delay(10);
 }
