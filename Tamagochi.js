@@ -99,7 +99,8 @@ Pet.prototype = {
       timeLastPet: this.timeLastPet,
       timeLastCleaned: this.timeLastCleaned // Save cleaning time
     };
-    var jsonString = JSON.stringify(petData) + "\n";
+    storage.remove(dbStore); // Remove old data before saving new data
+    var jsonString = JSON.stringify(petData);
     storage.write(dbStore, jsonString);
   }
 };
@@ -115,28 +116,19 @@ function loadPet() {
 
   if (data) {
     try {
-      var lines = data.split("\n");
-      // Filter out empty lines
-      var nonEmptyLines = [];
-      for (var i = 0; i < lines.length; i++) {
-        if (lines[i].trim() !== "") nonEmptyLines.push(lines[i]);
+      var obj = JSON.parse(data);
+      // Ensure timeLastFed and timeLastPet are numbers
+      obj.timeLastFed = Number(obj.timeLastFed);
+      obj.timeLastPet = Number(obj.timeLastPet);
+      // Handle old saves without timeLastCleaned
+      if (obj.timeLastCleaned === undefined) {
+        var hoursAgo = (100 - obj.cleanliness) / 5;
+        obj.timeLastCleaned = now() - hoursAgo * 3600000;
+      } else {
+        obj.timeLastCleaned = Number(obj.timeLastCleaned);
       }
-      var lastLine = nonEmptyLines[nonEmptyLines.length - 1];
-      if (lastLine) {
-        var obj = JSON.parse(lastLine);
-        // Ensure timeLastFed and timeLastPet are numbers
-        obj.timeLastFed = Number(obj.timeLastFed);
-        obj.timeLastPet = Number(obj.timeLastPet);
-         // Handle old saves without timeLastCleaned
-        if (obj.timeLastCleaned === undefined) {
-          var hoursAgo = (100 - obj.cleanliness) / 5;
-          obj.timeLastCleaned = now() - hoursAgo * 3600000;
-        } else {
-          obj.timeLastCleaned = Number(obj.timeLastCleaned);
-        }
-        return new Pet(obj.name, obj.type, obj.hunger, obj.cleanliness,
-                       obj.happiness, obj.timeLastFed, obj.timeLastPet, obj.timeLastCleaned);
-      }
+      return new Pet(obj.name, obj.type, obj.hunger, obj.cleanliness,
+                     obj.happiness, obj.timeLastFed, obj.timeLastPet, obj.timeLastCleaned);
     } catch (e2) {
       display.fill(currentBgColor);
       dialog.error("Failed to load pet data: " + e2.message);
