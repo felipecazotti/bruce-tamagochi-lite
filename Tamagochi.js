@@ -1,6 +1,3 @@
-// created by hxd57. V2
-// repository: https://github.com/HawkstoNGriM/m5-bruce-tamagochi-lite
-var dbStore = {fs: "sd", path: "/pet.json"}; // fs can be "sd" or "littlefs"
 var storage = require("storage");
 var display = require('display');
 var keyboard = require('keyboard');
@@ -14,8 +11,15 @@ var fillScreen = display.fill;
 var drawString = display.drawString;
 var setTextColor = display.setTextColor;
 var setTextSize = display.setTextSize;
-
 var serialCmd = serialApi.cmd;
+
+var fsChoice = dialog.choice([
+  ["SD", "sd"],
+  ["LittleFS", "fs"]
+]);
+
+var dbStore = {fs: fsChoice, path: "/BruceAppData/Tamagochi/Pet.json"};
+
 var pastelColors = {
   "Peach": color(255, 223, 186),
   "Mint": color(186, 255, 201),
@@ -99,12 +103,14 @@ Pet.prototype = {
       timeLastPet: this.timeLastPet,
       timeLastCleaned: this.timeLastCleaned // Save cleaning time
     };
-    storage.remove(dbStore); // Remove old data before saving new data
+    try{
+      storage.remove(dbStore);
+    } catch(arquivoNaoExiste) {
+    }
     var jsonString = JSON.stringify(petData);
     storage.write(dbStore, jsonString);
   }
 };
-
 
 function loadPet() {
   var data = null;
