@@ -96,12 +96,8 @@ Pet.prototype = {
       timeLastPet: this.timeLastPet,
       timeLastCleaned: this.timeLastCleaned // Save cleaning time
     };
-    try{
-      storage.remove(pathStorage);
-    } catch(arquivoNaoExiste) {
-    }
     const jsonString = JSON.stringify(petData);
-    storage.write(pathStorage, jsonString);
+    storage.write(pathStorage, jsonString, "write");
   }
 };
 
