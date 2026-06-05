@@ -1,3 +1,7 @@
+/**
+ * CONSTANTES
+ */
+
 const storage = require('storage');
 const display = require('display');
 const keyboard = require('keyboard');
@@ -25,7 +29,6 @@ const pastelColors = {
   "Aqua": display.color(127, 255, 212),
   "Beige": display.color(245, 245, 220)
 };
-var currentBgColor = pastelColors["Peach"];
 
 const faceColors = {
   "Black": display.color(0, 0, 0),
@@ -35,103 +38,45 @@ const faceColors = {
   "Green": display.color(0, 255, 0),
   "Purple": display.color(128, 0, 128)
 };
-var faceColor = faceColors["Black"]; // Default face display.color
+var currentBgColor = pastelColors["Peach"];
+var faceColor = faceColors["Black"];
 
-function Pet(name, type, hunger, cleanliness, happiness, timeLastFed, timeLastPet, timeLastCleaned) {
-  this.name = name || "gotchi"; // Changed default name to "gotchi"
-  this.type = type || "cat";
-  this.hunger = Math.min(100, Math.max(0, hunger !== undefined ? hunger : 0)); // Ensure hunger is between 0% and 100%
-  this.cleanliness = Math.min(100, Math.max(0, cleanliness !== undefined ? cleanliness : 100)); // Ensure cleanliness is between 0% and 100%
-  this.happiness = Math.min(100, Math.max(0, happiness !== undefined ? happiness : 50)); // Ensure happiness is between 0% and 100%
-  const time = now();
-  this.timeLastFed = timeLastFed || time;
-  this.timeLastPet = timeLastPet || time;
-  this.timeLastCleaned = timeLastCleaned || time; // Track cleaning time
+
+/**
+ * UTILS
+ */
+// Matematico
+function computeAccumulatedProgress(elapsedMilisseconds, ratePerHour) {
+  const elapsedHours =  elapsedMilisseconds / (60 * 60 * 1000);
+  return Math.floor(elapsedHours * ratePerHour);
 }
 
-Pet.prototype = {
-  feed: function() {
-    this.hunger = Math.max(0, this.hunger - 10); // Reduce hunger by 10%, but not below 0%
-    this.timeLastFed = now();
-    this.happiness = Math.min(100, this.happiness + 20); // Increase happiness by 20%, but not above 100%
-    display.fill(currentBgColor);
-    dialog.message(this.name + " has been fed!");
-  },
-  clean: function() {
-    this.cleanliness = 100; // Fully clean
-    this.timeLastCleaned = now();
-    display.fill(currentBgColor);
-    dialog.message(this.name + " is now clean!");
-  },
-  pet: function() {
-    this.happiness = Math.min(100, this.happiness + 10); // Reduced happiness gain
-    this.timeLastPet = now();
-    display.fill(currentBgColor);
-    dialog.message(this.name + " loves your petting!");
-  },
-  updateHunger: function() {
-    const time = now();
-    const elapsed = time - this.timeLastFed;
-    this.hunger = Math.min(100, Math.max(0, this.hunger + Math.floor(elapsed / 7200000) * 10)); // Ensure hunger is between 0% and 100%
-  },
-  updateHappiness: function() {
-    const time = now();
-    const elapsed = time - this.timeLastPet;
-    this.happiness = Math.max(0, this.happiness - Math.floor(elapsed / 3600000) * 5); // Ensure happiness is between 0% and 100%
-  },
-  updateCleanliness: function() {
-    const time = now();
-    const elapsed = time - this.timeLastCleaned;
-    const hours = elapsed / 3600000;
-    this.cleanliness = Math.max(0, 100 - Math.floor(hours * 5)); // Ensure cleanliness is between 0% and 100%
-  },
-  save: function() {
-    const petData = {
-      name: this.name,
-      type: this.type,
-      hunger: this.hunger,
-      cleanliness: this.cleanliness,
-      happiness: this.happiness,
-      timeLastFed: this.timeLastFed,
-      timeLastPet: this.timeLastPet,
-      timeLastCleaned: this.timeLastCleaned // Save cleaning time
-    };
-    const jsonString = JSON.stringify(petData);
-    storage.write(pathStorage, jsonString, "write");
-  }
-};
+function clamp(value, min, max, defaultValue) {
+  return Math.min(Math.max(min, value !== undefined ? value : defaultValue), max);
+}
+
+// Pet
+function getNewPet() {
+  display.fill(currentBgColor);
+  display.setTextColor(faceColor);
+  display.setTextSize(2);
+  const name = keyboard.keyboard("", 12, "Pet's name?") || "Gotchi";
+  const type = dialog.choice([["Cat", "cat"], ["Dog", "dog"], ["Bird", "bird"]]) || "cat";
+  return new Pet(name, type);
+}
 
 function loadPet() {
-  var data = null;
-  try {
-    data = storage.read(pathStorage);
-  } catch (e1) {
-    return null;
+  try{
+    const stringPet = storage.read(pathStorage);
+    const jsonPet = JSON.parse(stringPet);
+    return new Pet(jsonPet.name, jsonPet.type, jsonPet.hunger, jsonPet.cleanliness,
+                       jsonPet.happiness, jsonPet.timeLastFed, jsonPet.timeLastPet, jsonPet.timeLastCleaned);
+  } catch(readException) {
+    dialog.error("Nenhum Pet encontrado, criando um novo...", true);
+    const newPet = getNewPet();
+    newPet.save();
+    return newPet;
   }
-
-  if (data) {
-    try {
-      const obj = JSON.parse(data);
-      // Ensure timeLastFed and timeLastPet are numbers
-      obj.timeLastFed = Number(obj.timeLastFed);
-      obj.timeLastPet = Number(obj.timeLastPet);
-      // Handle old saves without timeLastCleaned
-      if (obj.timeLastCleaned === undefined) {
-        const hoursAgo = (100 - obj.cleanliness) / 5;
-        obj.timeLastCleaned = now() - hoursAgo * 3600000;
-      } else {
-        obj.timeLastCleaned = Number(obj.timeLastCleaned);
-      }
-      return new Pet(obj.name, obj.type, obj.hunger, obj.cleanliness,
-                     obj.happiness, obj.timeLastFed, obj.timeLastPet, obj.timeLastCleaned);
-    } catch (e2) {
-      display.fill(currentBgColor);
-      dialog.error("Failed to load pet data: " + e2.message);
-      delay(10000);
-      throw e2;
-    }
-  }
-  return null; // No pet file found
 }
 
 function drawPet(pet) {
@@ -181,8 +126,6 @@ function drawPet(pet) {
   display.drawString("Fed:" + fedHrs + "h  Pet:" + petHrs + "h", 10, SCREEN_HEIGHT - 30);
 }
 
-
-
 function showHeartAnimation() {
   const heartText = "<3-<3";
   var heartWidth = heartText.length * 12;
@@ -223,21 +166,90 @@ function showHeartAnimation() {
   display.fill(currentBgColor);
 }
 
+/**
+ * CLASSE PET
+ */
+
+
+function Pet(name, type, hunger, cleanliness, happiness, timeLastFed, timeLastPet, timeLastCleaned) {
+  this.name = name || "Gotchi";
+  this.type = type || "cat";
+  this.hunger = clamp(hunger, 0, 100, 0);
+  this.cleanliness = clamp(cleanliness, 0, 100, 100);
+  this.happiness = clamp(happiness, 0, 100, 50);
+  
+  const time = now();
+  this.timeLastFed = Number(timeLastFed || time);
+  this.timeLastPet = Number(timeLastPet || time);
+  this.timeLastCleaned = Number(timeLastCleaned || time);
+}
+
+Pet.prototype = {
+  feed: function() {
+    this.hunger = clamp(this.hunger - 10, 0, 100, this.hunger);
+    this.timeLastFed = now();
+    this.happiness = clamp(this.happiness + 20, 0, 100, this.happiness);
+    display.fill(currentBgColor);
+    dialog.message(this.name + " has been fed!");
+  },
+  clean: function() {
+    this.cleanliness = 100;
+    this.timeLastCleaned = now();
+    display.fill(currentBgColor);
+    dialog.message(this.name + " is now clean!");
+  },
+  pet: function() {
+    this.happiness = clamp(this.happiness + 10, 0, 100, this.happiness);
+    this.timeLastPet = now();
+    display.fill(currentBgColor);
+    dialog.message(this.name + " loves your petting!");
+  },
+  updateHunger: function() {
+    const elapsedMilisseconds = now() - this.timeLastFed;
+    const accumulatedHunger = computeAccumulatedProgress(elapsedMilisseconds, 5);
+    this.hunger = clamp(this.hunger + accumulatedHunger, 0, 100, this.hunger);
+  },
+  updateHappiness: function() {
+    const elapsedMilisseconds = now() - this.timeLastPet;
+    const accumulatedBoredom = computeAccumulatedProgress(elapsedMilisseconds, 5);
+    this.happiness = clamp(this.happiness - accumulatedBoredom, 0, 100, this.happiness);
+  },
+  updateCleanliness: function() {
+    const time = now();
+    const elapsedMilisseconds = now() - this.timeLastCleaned;
+    const accumulatedDirt = computeAccumulatedProgress(elapsedMilisseconds, 5);
+    this.cleanliness = clamp(this.cleanliness - accumulatedDirt, 0, 100, this.cleanliness);
+  },
+  save: function() {
+    const petData = {
+      name: this.name,
+      type: this.type,
+      hunger: this.hunger,
+      cleanliness: this.cleanliness,
+      happiness: this.happiness,
+      timeLastFed: this.timeLastFed,
+      timeLastPet: this.timeLastPet,
+      timeLastCleaned: this.timeLastCleaned
+    };
+    const jsonString = JSON.stringify(petData);
+    storage.write(pathStorage, jsonString, "write");
+  }
+};
+
+/**
+ *  MAIN
+ */
+
 var pet = loadPet();
 
 if (!pet) {
-  display.fill(currentBgColor);
-  display.setTextColor(faceColor);
-  display.setTextSize(2);
-  const name = keyboard.keyboard("", 12, "Pet's name?") || "gotchi"; // Default to "gotchi"
-  const type = dialog.choice([["Cat", "cat"], ["Dog", "dog"], ["Bird", "bird"]]) || "cat";
-  pet = new Pet(name, type);
+  pet = getNewPet();
   pet.save();
 }
 
-var updateTime=0;
+var updateTime = 0;
 while (true) {
-  if(now()-updateTime>500){
+  if(now() - updateTime > 1000){
     pet.updateHunger();
     pet.updateHappiness();
     pet.updateCleanliness();
@@ -303,16 +315,8 @@ while (true) {
       ]);
 
       if (confirm === "yes") {
-        //storage.remove("/JS-scripts/bruce_0.sub");
         storage.remove(pathStorage);
- 
-        // Create a new pet
-        display.fill(currentBgColor);
-        display.setTextColor(faceColor);
-        display.setTextSize(2);
-        const name = keyboard.keyboard("", 12, "Pet's name?") || "gotchi"; // Default to "gotchi"
-        const type = dialog.choice([["Cat", "cat"], ["Dog", "dog"], ["Bird", "bird"]]) || "cat";
-        pet = new Pet(name, type);
+        pet = getNewPet();
         pet.save();
       }
     }
